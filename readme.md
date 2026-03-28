@@ -2,7 +2,7 @@
 
 Predicts flight delay probability using UK CAA punctuality data and a Random Forest classifier.
 
-**[Try the live demo →](#)** *(update with your GitHub Pages URL)*
+**[Try the live demo →](https://kevgilmore.github.io/airline-delay-ml/)**
 
 ## Setup
 
