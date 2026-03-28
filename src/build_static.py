@@ -5,7 +5,6 @@ Outputs docs/index.html with all data embedded as JSON — no backend needed.
 
 import hashlib
 import json
-from datetime import date, timedelta
 from pathlib import Path
 
 import joblib
@@ -79,54 +78,47 @@ def build():
         proba = float(model.predict_proba(row)[0][1])
         predictions[key_str] = round(proba * 100, 1)
 
-    # Pre-compute flight schedules
-    today = date.today()
-    all_flights = {}
+    # Build route templates (no dates — JS generates those client-side)
+    route_templates = {}
     for key_str, dests in flights.items():
         parts = key_str.split("||")
         airport, country, airline, direction = parts
-        schedule = []
+        entries = []
         for dest_info in dests:
             dest = dest_info["destination"]
             monthly = dest_info["flights_per_month"]
             daily = max(1, round(monthly / 30))
-            for day_offset in range(7):
-                flight_date = today + timedelta(days=day_offset)
-                for i in range(daily):
-                    seed = f"{airport}-{dest}-{airline}-{direction}-{i}"
-                    schedule.append({
-                        "flight_number": _generate_flight_number(airline, dest, i),
-                        "destination": dest,
-                        "date": flight_date.isoformat(),
-                        "time": _generate_time(seed, 0),
-                        "avg_delay": dest_info["avg_delay"],
-                    })
-        schedule.sort(key=lambda x: (x["date"], x["time"], x["destination"]))
-        all_flights[key_str] = schedule
-
-    # Read the HTML template and replace Jinja with baked data
-    template = (ROOT / "templates" / "index.html").read_text()
+            for i in range(daily):
+                seed = f"{airport}-{dest}-{airline}-{direction}-{i}"
+                entries.append({
+                    "flight_number": _generate_flight_number(airline, dest, i),
+                    "destination": dest,
+                    "time": _generate_time(seed, 0),
+                    "avg_delay": dest_info["avg_delay"],
+                })
+        entries.sort(key=lambda x: (x["time"], x["destination"]))
+        route_templates[key_str] = entries
 
     # Build static HTML
     airports_json = json.dumps(category_values["reporting_airport"])
     airport_countries_json = json.dumps(airport_countries)
     route_airlines_json = json.dumps(route_airlines_js)
     predictions_json = json.dumps(predictions)
-    flights_json = json.dumps(all_flights)
+    routes_json = json.dumps(route_templates)
 
     html = _build_static_html(
         airports_json, airport_countries_json, route_airlines_json,
-        predictions_json, flights_json,
+        predictions_json, routes_json,
     )
 
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     (DOCS_DIR / "index.html").write_text(html)
     print(f"Built static site: {DOCS_DIR / 'index.html'}")
     print(f"  Routes: {len(predictions)}")
-    print(f"  Flights: {sum(len(v) for v in all_flights.values())}")
+    print(f"  Daily flight templates: {sum(len(v) for v in route_templates.values())}")
 
 
-def _build_static_html(airports, airport_countries, route_airlines, predictions, flights):
+def _build_static_html(airports, airport_countries, route_airlines, predictions, route_templates):
     """Generate the full static HTML page."""
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -297,7 +289,7 @@ def _build_static_html(airports, airport_countries, route_airlines, predictions,
 const airports = {airports};
 const airportCountries = {airport_countries};
 const routeAirlines = {route_airlines};
-const allFlights = {flights};
+const routeTemplates = {route_templates};
 const predictions = {predictions};
 
 const airportEl = document.getElementById('airport');
@@ -359,7 +351,19 @@ function loadFlights() {{
     return;
   }}
   const key = getRouteKey();
-  const flights = allFlights[key] || [];
+  const templates = routeTemplates[key] || [];
+  // Generate 7 days of flights from today using the daily templates
+  const today = new Date();
+  const flights = [];
+  for (let d = 0; d < 7; d++) {{
+    const day = new Date(today);
+    day.setDate(today.getDate() + d);
+    const dateStr = day.toISOString().split('T')[0];
+    templates.forEach(t => {{
+      flights.push({{ ...t, date: dateStr }});
+    }});
+  }}
+  flights.sort((a, b) => (a.date + a.time + a.destination).localeCompare(b.date + b.time + b.destination));
   flightsSection.style.display = 'block';
   resultSection.innerHTML = '';
   renderFlights(flights);

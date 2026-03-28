@@ -20,6 +20,7 @@ python -m src.save_model      # save model.joblib + model_metadata.joblib to mod
 
 # Web app (requires saved model — run save_model first)
 python app.py                 # Flask dev server on http://127.0.0.1:5000
+python -m src.build_static    # build static site to docs/ for GitHub Pages
 
 # Install dependencies
 pip install -r requirements.txt
@@ -47,6 +48,8 @@ load_data → preprocess → features → train → evaluate
 - Notebooks are for exploration only — core logic lives in `src/`
 - `app.py` (repo root) is a Flask frontend that loads saved model artifacts from `models/`. It reconstructs one-hot encoded feature vectors from form inputs by zero-initialising the full column schema and setting the appropriate `{feature}_{value}` column to 1
 - `save_model.py` persists both the model and a metadata dict (column schema, dropdown values, numeric defaults) so the Flask app never needs to import the training pipeline
+- `build_static.py` pre-computes all predictions and bakes them into a single `docs/index.html` — no backend needed for GitHub Pages deployment
+- GitHub Actions workflow (`.github/workflows/deploy.yml`) trains the model, builds the static site, and deploys to Pages on push to main
 
 ## Data
 
